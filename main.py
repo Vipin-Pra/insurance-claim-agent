@@ -1,8 +1,9 @@
 import os
 import json
+import time
 import uuid
 from threading import Lock
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -35,8 +36,15 @@ API_KEY = os.environ.get("API_KEY", "")
 SESSION_BACKEND = os.environ.get("SESSION_BACKEND", "memory").strip().lower()
 SESSION_TTL_SECONDS = _env_int("SESSION_TTL_SECONDS", 3600)
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+RATE_LIMIT_ENABLED = _env_bool("RATE_LIMIT_ENABLED", "true")
+RATE_LIMIT_WINDOW_SECONDS = _env_int("RATE_LIMIT_WINDOW_SECONDS", 60)
+RATE_LIMIT_IP_MAX_REQUESTS = _env_int("RATE_LIMIT_IP_MAX_REQUESTS", 120)
+RATE_LIMIT_SESSION_MAX_REQUESTS = _env_int("RATE_LIMIT_SESSION_MAX_REQUESTS", 180)
 
 _REDIS_CLIENT = None
+_IP_RATE_STATE: Dict[str, Tuple[int, int]] = {}
+_SESSION_RATE_STATE: Dict[str, Tuple[int, int]] = {}
+_RATE_LOCK = Lock()
 
 
 def _redis_key(session_id: str) -> str:
@@ -93,10 +101,73 @@ class ResetRequest(BaseModel):
     task: Optional[str] = "easy"
 
 
+def _current_window_start() -> int:
+    now = int(time.time())
+    window = max(1, RATE_LIMIT_WINDOW_SECONDS)
+    return now - (now % window)
+
+
+def _check_bucket(state: Dict[str, Tuple[int, int]], key: str, max_requests: int) -> Tuple[bool, int]:
+    if max_requests <= 0:
+        return True, 0
+
+    now = int(time.time())
+    window_start = _current_window_start()
+    count, stored_window = state.get(key, (0, window_start))
+    if stored_window != window_start:
+        count = 0
+        stored_window = window_start
+
+    count += 1
+    state[key] = (count, stored_window)
+    allowed = count <= max_requests
+    retry_after = max(1, (stored_window + max(1, RATE_LIMIT_WINDOW_SECONDS)) - now)
+    return allowed, retry_after
+
+
+def _prune_rate_state() -> None:
+    current_window = _current_window_start()
+    stale_windows = {current_window - max(1, RATE_LIMIT_WINDOW_SECONDS), current_window}
+    for key in list(_IP_RATE_STATE.keys()):
+        if _IP_RATE_STATE[key][1] not in stale_windows:
+            del _IP_RATE_STATE[key]
+    for key in list(_SESSION_RATE_STATE.keys()):
+        if _SESSION_RATE_STATE[key][1] not in stale_windows:
+            del _SESSION_RATE_STATE[key]
+
+
+def _rate_limit_error(request_id: str, retry_after: int, scope: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        headers={"Retry-After": str(retry_after), "X-Request-ID": request_id},
+        content=APIError(
+            code="rate_limited",
+            message=f"Rate limit exceeded for {scope}. Retry later.",
+            request_id=request_id,
+        ).model_dump(),
+    )
+
+
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     request.state.request_id = request_id
+
+    if RATE_LIMIT_ENABLED:
+        client_host = request.client.host if request.client else "unknown"
+        session_id = request.headers.get("X-Session-ID", DEFAULT_SESSION_ID)
+        with _RATE_LOCK:
+            _prune_rate_state()
+            ip_allowed, ip_retry_after = _check_bucket(_IP_RATE_STATE, client_host, RATE_LIMIT_IP_MAX_REQUESTS)
+            if not ip_allowed:
+                return _rate_limit_error(request_id, ip_retry_after, "ip")
+
+            sess_allowed, sess_retry_after = _check_bucket(
+                _SESSION_RATE_STATE, session_id, RATE_LIMIT_SESSION_MAX_REQUESTS
+            )
+            if not sess_allowed:
+                return _rate_limit_error(request_id, sess_retry_after, "session")
+
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     return response

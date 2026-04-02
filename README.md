@@ -40,6 +40,7 @@ The service now supports production-oriented controls:
 - Health endpoints: `GET /health` and `GET /ready`.
 - Request tracing via `X-Request-ID` response header.
 - Configurable session backend: in-memory (`memory`) or Redis (`redis`) with TTL.
+- Rate limiting with `429` responses (per IP and per session).
 
 Enable API key auth:
 ```bash
@@ -55,6 +56,17 @@ export REDIS_URL="redis://localhost:6379/0"
 export SESSION_TTL_SECONDS=3600
 python main.py
 ```
+
+Configure rate limiting:
+```bash
+export RATE_LIMIT_ENABLED=true
+export RATE_LIMIT_WINDOW_SECONDS=60
+export RATE_LIMIT_IP_MAX_REQUESTS=120
+export RATE_LIMIT_SESSION_MAX_REQUESTS=180
+python main.py
+```
+
+When limits are exceeded, the API returns `429` with a `Retry-After` header.
 
 Example request flow with session header:
 ```bash
