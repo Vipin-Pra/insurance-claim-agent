@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, Dict, Any, Literal
 
 class ActionSchema(BaseModel):
@@ -7,6 +7,22 @@ class ActionSchema(BaseModel):
     document_type: Optional[str] = Field(None, description="Required if action_type is RequestDocument (e.g. 'Police Report')")
     claim_id: Optional[str] = Field(None, description="Required if action_type is AnalyzeFraud")
     reason: Optional[str] = Field(None, description="Required if action_type is ApproveClaim or RejectClaim")
+
+    @model_validator(mode="after")
+    def validate_action_fields(self):
+        required_fields = {
+            "SearchPolicy": "policy_id",
+            "RequestDocument": "document_type",
+            "AnalyzeFraud": "claim_id",
+            "ApproveClaim": "reason",
+            "RejectClaim": "reason",
+        }
+
+        required_field = required_fields[self.action_type]
+        if not getattr(self, required_field):
+            raise ValueError(f"{required_field} is required for action_type '{self.action_type}'.")
+
+        return self
 
 class ObservationSchema(BaseModel):
     message: str

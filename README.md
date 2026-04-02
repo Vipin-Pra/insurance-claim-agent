@@ -31,6 +31,38 @@ export MODEL_NAME="gpt-4o-mini"
 python inference.py
 ```
 
+## API Hardening Notes (Production)
+
+The service now supports production-oriented controls:
+
+- API key auth via header `X-API-Key` (optional by default).
+- Per-session isolation via header `X-Session-ID`.
+- Health endpoints: `GET /health` and `GET /ready`.
+- Request tracing via `X-Request-ID` response header.
+
+Enable API key auth:
+```bash
+export REQUIRE_API_KEY=true
+export API_KEY="change-me"
+python main.py
+```
+
+Example request flow with session header:
+```bash
+# Reset and get a fresh session (or provide your own X-Session-ID)
+curl -X POST http://localhost:7860/reset \
+	-H "Content-Type: application/json" \
+	-H "X-API-Key: change-me" \
+	-d '{"task":"easy"}'
+
+# Use the same X-Session-ID value for step/state requests
+curl -X POST http://localhost:7860/step \
+	-H "Content-Type: application/json" \
+	-H "X-API-Key: change-me" \
+	-H "X-Session-ID: <session-id>" \
+	-d '{"action_type":"SearchPolicy","policy_id":"POL-1001"}'
+```
+
 ## Usage (Stable-Baselines3 Reinforcement Learning)
 
 The environment includes a Gymnasium wrapper which flattens the complex string-based semantic variables into discrete multidimensional math spaces for RL algorithms (PPO) to learn from!
@@ -56,6 +88,17 @@ python evaluate_rl.py --model-path models/ppo_insurance
 
 # Print state transitions during evaluation
 python evaluate_rl.py --render
+```
+
+## Google Colab (Train + Evaluate)
+
+Run this in a single Colab cell:
+```bash
+!git clone https://github.com/Vipin-Pra/insurance-claim-agent.git
+%cd insurance-claim-agent
+!pip install -r requirements.txt
+!python train_rl.py
+!python evaluate_rl.py --episodes 90
 ```
 
 ## Validation
