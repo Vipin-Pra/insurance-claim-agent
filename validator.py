@@ -1,6 +1,84 @@
 import os
 import sys
 
+from fastapi.testclient import TestClient
+
+from main import app
+from app.tasks import TASKS, grade_task
+
+
+def validate_openenv_yaml() -> None:
+    with open('openenv.yaml', 'r') as f:
+        content = f.read()
+        required = ['action_space', 'observation_space', 'tasks', 'entrypoint']
+        missing = [k for k in required if k not in content]
+        if missing:
+            print(f"[ERROR] openenv.yaml missing required keys: {missing}")
+            sys.exit(1)
+
+
+def validate_tasks_and_graders() -> None:
+    if len(TASKS) < 3:
+        print("[ERROR] Must define at least 3 tasks.")
+        sys.exit(1)
+
+    for task_name, task_data in TASKS.items():
+        state = {
+            "documents_received": task_data["documents_provided"],
+            "policy_verified": False,
+            "fraud_analyzed": False,
+            "missing_documents_requested": False,
+            "last_action_type": None,
+        }
+        score = grade_task(task_name, task_data, state, [], done=False)
+        if not (0.0 <= score <= 1.0):
+            print(f"[ERROR] Grader score out of range for task '{task_name}': {score}")
+            sys.exit(1)
+
+
+def validate_api_contract() -> None:
+    client = TestClient(app)
+
+    for task_name in ["easy", "medium", "hard"]:
+        reset_resp = client.post("/reset", json={"task": task_name})
+        if reset_resp.status_code != 200:
+            print(f"[ERROR] /reset failed for task '{task_name}' with status {reset_resp.status_code}")
+            sys.exit(1)
+
+        session_id = reset_resp.headers.get("X-Session-ID")
+        headers = {"X-Session-ID": session_id} if session_id else {}
+        payload = reset_resp.json()
+
+        for key in ["message", "data", "reward", "done", "info"]:
+            if key not in payload:
+                print(f"[ERROR] /reset response missing key '{key}' for task '{task_name}'")
+                sys.exit(1)
+
+        step_resp = client.post(
+            "/step",
+            json={"action_type": "SearchPolicy", "policy_id": TASKS[task_name]["policy_id"]},
+            headers=headers,
+        )
+        if step_resp.status_code != 200:
+            print(f"[ERROR] /step failed for task '{task_name}' with status {step_resp.status_code}")
+            sys.exit(1)
+
+        step_payload = step_resp.json()
+        for key in ["message", "data", "reward", "done", "info"]:
+            if key not in step_payload:
+                print(f"[ERROR] /step response missing key '{key}' for task '{task_name}'")
+                sys.exit(1)
+
+        if not (0.0 <= float(step_payload.get("reward", 0.0)) <= 1.0):
+            print(f"[ERROR] /step reward out of range for task '{task_name}'")
+            sys.exit(1)
+
+        state_resp = client.get("/state", headers=headers)
+        if state_resp.status_code != 200:
+            print(f"[ERROR] /state failed for task '{task_name}' with status {state_resp.status_code}")
+            sys.exit(1)
+
+
 def main():
     print("Running Pre-submission Validator...")
     
@@ -12,13 +90,15 @@ def main():
             
     print("[SUCCESS] All required files present.")
     
-    with open('openenv.yaml', 'r') as f:
-        content = f.read()
-        if 'action_space' not in content or 'observation_space' not in content or 'tasks' not in content:
-            print("[ERROR] openenv.yaml missing required keys (action_space, observation_space, tasks).")
-            sys.exit(1)
+    validate_openenv_yaml()
+    print("[SUCCESS] openenv.yaml has required keys.")
+
+    validate_tasks_and_graders()
+    print("[SUCCESS] Task graders are present and return scores in [0.0, 1.0].")
+
+    validate_api_contract()
+    print("[SUCCESS] API contract checks passed for /reset, /step, /state.")
             
-    print("[SUCCESS] openenv.yaml is valid.")
     print("\nAll checks passed. You are ready to build the docker container and deploy to Hugging Face Spaces!")
 
 if __name__ == "__main__":

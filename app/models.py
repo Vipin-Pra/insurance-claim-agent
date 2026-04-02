@@ -29,3 +29,9 @@ class ObservationSchema(BaseModel):
     data: Optional[Dict[str, Any]] = None
     reward: float = 0.0
     done: bool = False
+    info: Optional[Dict[str, Any]] = None
+
+
+class RewardSchema(BaseModel):
+    value: float = Field(..., ge=0.0, le=1.0)
+    details: Optional[Dict[str, Any]] = None

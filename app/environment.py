@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from .models import ActionSchema, ObservationSchema
-from .tasks import TASKS
+from .tasks import TASKS, grade_task
 
 class InsuranceEnvironment:
     def __init__(self):
@@ -19,8 +19,11 @@ class InsuranceEnvironment:
             "documents_received": self.task_data["documents_provided"].copy(),
             "policy_verified": False,
             "fraud_analyzed": False,
-            "missing_documents_requested": False
+            "missing_documents_requested": False,
+            "last_action_type": None,
         }
+
+        self.action_history = []
         
         self.done = False
         self.step_count = 0
@@ -31,7 +34,8 @@ class InsuranceEnvironment:
             message=f"Environment reset to task '{task_name}'. You have a new claim to process. Claim ID: {self.current_state['claim_id']}. Description: {self.current_state['description']}",
             data={"claim_id": self.current_state["claim_id"], "documents_received": self.current_state["documents_received"]},
             reward=0.0,
-            done=False
+            done=False,
+            info={"task": task_name, "grader_score": 0.0},
         )
 
     def step(self, action: ActionSchema) -> ObservationSchema:
@@ -39,6 +43,8 @@ class InsuranceEnvironment:
             return ObservationSchema(message="Episode is already done. Please reset.", data=self.current_state, reward=0.0, done=True)
             
         self.step_count += 1
+        self.current_state["last_action_type"] = action.action_type
+        self.action_history.append(action.action_type)
         reward = 0.0
         message = ""
         done = False
@@ -108,15 +114,30 @@ class InsuranceEnvironment:
             done = True
             message = "Max steps reached without a final decision."
 
+        grader_score = grade_task(
+            self.task_name,
+            self.task_data,
+            self.current_state,
+            self.action_history,
+            done,
+        )
+
+        if done:
+            reward = grader_score
+
         self.done = done
-        self.reward = max(0.0, min(1.0, reward)) # Clamp between 0 and 1 per step requirement (or accumulate, wait, OpenEnv rewards are usually partial but for final evaluation we want a final sum up to 1.0)
-        # To make it easier, let's just make the final reward the score. Current implementation gives 1.0 on success.
+        self.reward = max(0.0, min(1.0, reward))
         
         return ObservationSchema(
             message=message,
             data=self.current_state,
-            reward=reward, # return the step reward
-            done=done
+            reward=reward,
+            done=done,
+            info={
+                "task": self.task_name,
+                "grader_score": grader_score,
+                "steps_used": self.step_count,
+            },
         )
 
     def state(self) -> ObservationSchema:
@@ -124,7 +145,12 @@ class InsuranceEnvironment:
             message="Current environment state",
             data=self.current_state,
             reward=self.reward,
-            done=self.done
+            done=self.done,
+            info={
+                "task": self.task_name,
+                "steps_used": self.step_count,
+                "history": self.action_history,
+            },
         )
 
     def to_snapshot(self) -> Dict[str, Any]:
@@ -136,6 +162,7 @@ class InsuranceEnvironment:
             "step_count": self.step_count,
             "max_steps": self.max_steps,
             "reward": self.reward,
+            "action_history": self.action_history,
         }
 
     @classmethod
@@ -148,4 +175,5 @@ class InsuranceEnvironment:
         env.step_count = snapshot["step_count"]
         env.max_steps = snapshot["max_steps"]
         env.reward = snapshot["reward"]
+        env.action_history = snapshot.get("action_history", [])
         return env

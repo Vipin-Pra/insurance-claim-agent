@@ -23,6 +23,13 @@ observation_space:
     data: "Dict"
     reward: "float"
     done: "bool"
+    info: "Dict"
+
+reward_space:
+  type: "Dict"
+  schema:
+    value: "float"
+    details: "Dict"
 
 # Action space definition
 action_space:

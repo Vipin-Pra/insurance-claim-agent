@@ -5,6 +5,8 @@ colorFrom: blue
 colorTo: green
 sdk: docker
 app_port: 7860
+tags:
+	- openenv
 ---
 
 # Insurance Claim Verification OpenEnv Environment
@@ -15,6 +17,35 @@ A complete, real-world OpenEnv environment simulating an AI agent acting as an i
 * **Easy**: Straightforward verification. All required documents present, policy active, no fraud.
 * **Medium**: Documents are missing. Agent must use the `RequestDocument` action before approving.
 * **Hard**: Potential fraud present. Discrepancies between claim and police/fire reports must be analyzed. Agent must use `AnalyzeFraud` and then `RejectClaim`.
+
+## Action, Observation, Reward Spaces
+
+Action space (`ActionSchema`):
+- `action_type`: one of `SearchPolicy`, `RequestDocument`, `AnalyzeFraud`, `ApproveClaim`, `RejectClaim`
+- `policy_id`: required for `SearchPolicy`
+- `document_type`: required for `RequestDocument`
+- `claim_id`: required for `AnalyzeFraud`
+- `reason`: required for `ApproveClaim` and `RejectClaim`
+
+Observation space (`ObservationSchema`):
+- `message`: text status
+- `data`: current environment state
+- `reward`: step reward in range `[0.0, 1.0]`
+- `done`: episode termination flag
+- `info`: grader metadata (`task`, `grader_score`, `steps_used`)
+
+Reward space (`RewardSchema`):
+- `value`: typed reward in `[0.0, 1.0]`
+- `details`: optional metadata
+
+## Task Graders
+
+Each task has a deterministic grader producing a score in `[0.0, 1.0]`:
+- `easy`: full score requires policy verification + required docs + correct approval.
+- `medium`: full score requires requesting missing docs + policy verification + correct approval.
+- `hard`: full score requires fraud analysis + correct rejection.
+
+These graders are implemented in `app/tasks.py` and used by the environment on each step and final decision.
 
 ## Usage (LLM Evaluation Baseline)
 
@@ -28,8 +59,26 @@ python main.py
 export HF_TOKEN="your-api-key"
 export API_BASE_URL="https://api.openai.com/v1"
 export MODEL_NAME="gpt-4o-mini"
+export INFERENCE_SEED=42
 python inference.py
 ```
+
+## Baseline Reproducibility
+
+The baseline script is deterministic by default (`temperature=0`, `INFERENCE_SEED=42`) and prints per-task scores (`easy`, `medium`, `hard`) plus final summary.
+
+Expected output format:
+```text
+=== FINAL SCORES ===
+easy: <0.00-1.00>
+medium: <0.00-1.00>
+hard: <0.00-1.00>
+```
+
+Record your latest run scores here before submission:
+- easy: 
+- medium: 
+- hard: 
 
 ## API Hardening Notes (Production)
 

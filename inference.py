@@ -9,6 +9,8 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 HF_TOKEN = os.getenv("HF_TOKEN")
 ENV_URL = os.getenv("ENV_URL", "http://localhost:7860")
+ENV_API_KEY = os.getenv("ENV_API_KEY")
+SEED = int(os.getenv("INFERENCE_SEED", "42"))
 
 client = OpenAI(
     api_key=HF_TOKEN or os.getenv("OPENAI_API_KEY", "dummy"),
@@ -35,10 +37,17 @@ Rules:
 
 def solve_task(task_name):
     print(f"\n--- Starting Task: {task_name} ---")
+    headers = {}
+    if ENV_API_KEY:
+        headers["X-API-Key"] = ENV_API_KEY
+
     try:
-        res = requests.post(f"{ENV_URL}/reset", json={"task": task_name})
+        res = requests.post(f"{ENV_URL}/reset", json={"task": task_name}, headers=headers)
         res.raise_for_status()
         obs = res.json()
+        session_id = res.headers.get("X-Session-ID")
+        if session_id:
+            headers["X-Session-ID"] = session_id
     except Exception as e:
         print(f"Failed to reset environment: {e}")
         return 0.0
@@ -56,7 +65,8 @@ def solve_task(task_name):
                 model=MODEL_NAME,
                 messages=messages,
                 response_format={ "type": "json_object" },
-                temperature=0.1
+                temperature=0,
+                seed=SEED,
             )
             action_text = response.choices[0].message.content
             action = json.loads(action_text)
@@ -64,9 +74,13 @@ def solve_task(task_name):
             
             messages.append({"role": "assistant", "content": action_text})
             
-            res = requests.post(f"{ENV_URL}/step", json=action)
+            res = requests.post(f"{ENV_URL}/step", json=action, headers=headers)
             res.raise_for_status()
             obs = res.json()
+
+            new_session_id = res.headers.get("X-Session-ID")
+            if new_session_id:
+                headers["X-Session-ID"] = new_session_id
             
             print(f"Observation: {obs['message']}")
             messages.append({"role": "user", "content": f"Observation:\n{json.dumps(obs, indent=2)}"})
@@ -80,7 +94,7 @@ def solve_task(task_name):
             print(f"Error during agent loop: {e}")
             break
             
-        time.sleep(1) # small delay
+        time.sleep(0.2)
         
     return score
 
