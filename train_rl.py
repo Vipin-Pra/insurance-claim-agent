@@ -4,6 +4,10 @@ from stable_baselines3.common.env_checker import check_env
 from gym_wrapper import InsuranceGymWrapper
 
 def main():
+    model_dir = "models"
+    model_name = "ppo_insurance"
+    model_path = os.path.join(model_dir, model_name)
+
     print("Initializing InsuranceGymWrapper...")
     env = InsuranceGymWrapper()
     
@@ -18,6 +22,10 @@ def main():
     except Exception as e:
         print(f"Training failed: {e}")
         return
+
+    os.makedirs(model_dir, exist_ok=True)
+    model.save(model_path)
+    print(f"Saved trained model to {model_path}.zip")
 
     print("\nTraining complete! Evaluating the agent...")
     

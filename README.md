@@ -39,6 +39,25 @@ pip install -r requirements.txt
 python train_rl.py
 ```
 
+Training now saves a reusable model at `models/ppo_insurance.zip`.
+
+To evaluate the saved model across multiple episodes and tasks:
+```bash
+python evaluate_rl.py
+```
+
+Optional arguments:
+```bash
+# Evaluate more episodes
+python evaluate_rl.py --episodes 90
+
+# Evaluate a different saved model path
+python evaluate_rl.py --model-path models/ppo_insurance
+
+# Print state transitions during evaluation
+python evaluate_rl.py --render
+```
+
 ## Validation
 ```bash
 python validator.py
