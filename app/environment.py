@@ -126,3 +126,26 @@ class InsuranceEnvironment:
             reward=self.reward,
             done=self.done
         )
+
+    def to_snapshot(self) -> Dict[str, Any]:
+        return {
+            "task_name": self.task_name,
+            "task_data": self.task_data,
+            "current_state": self.current_state,
+            "done": self.done,
+            "step_count": self.step_count,
+            "max_steps": self.max_steps,
+            "reward": self.reward,
+        }
+
+    @classmethod
+    def from_snapshot(cls, snapshot: Dict[str, Any]) -> "InsuranceEnvironment":
+        env = cls()
+        env.task_name = snapshot["task_name"]
+        env.task_data = snapshot["task_data"]
+        env.current_state = snapshot["current_state"]
+        env.done = snapshot["done"]
+        env.step_count = snapshot["step_count"]
+        env.max_steps = snapshot["max_steps"]
+        env.reward = snapshot["reward"]
+        return env

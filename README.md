@@ -39,11 +39,20 @@ The service now supports production-oriented controls:
 - Per-session isolation via header `X-Session-ID`.
 - Health endpoints: `GET /health` and `GET /ready`.
 - Request tracing via `X-Request-ID` response header.
+- Configurable session backend: in-memory (`memory`) or Redis (`redis`) with TTL.
 
 Enable API key auth:
 ```bash
 export REQUIRE_API_KEY=true
 export API_KEY="change-me"
+python main.py
+```
+
+Enable Redis session backend with TTL:
+```bash
+export SESSION_BACKEND=redis
+export REDIS_URL="redis://localhost:6379/0"
+export SESSION_TTL_SECONDS=3600
 python main.py
 ```
 
