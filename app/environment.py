@@ -1,0 +1,128 @@
+from typing import Dict, Any
+from .models import ActionSchema, ObservationSchema
+from .tasks import TASKS
+
+class InsuranceEnvironment:
+    def __init__(self):
+        self.reset("easy")
+
+    def reset(self, task_name: str = "easy") -> ObservationSchema:
+        if task_name not in TASKS:
+            raise ValueError(f"Task {task_name} not found.")
+            
+        self.task_name = task_name
+        self.task_data = TASKS[task_name].copy()
+        
+        self.current_state = {
+            "claim_id": self.task_data["claim_id"],
+            "description": self.task_data["description"],
+            "documents_received": self.task_data["documents_provided"].copy(),
+            "policy_verified": False,
+            "fraud_analyzed": False,
+            "missing_documents_requested": False
+        }
+        
+        self.done = False
+        self.step_count = 0
+        self.max_steps = 10
+        self.reward = 0.0
+
+        return ObservationSchema(
+            message=f"Environment reset to task '{task_name}'. You have a new claim to process. Claim ID: {self.current_state['claim_id']}. Description: {self.current_state['description']}",
+            data={"claim_id": self.current_state["claim_id"], "documents_received": self.current_state["documents_received"]},
+            reward=0.0,
+            done=False
+        )
+
+    def step(self, action: ActionSchema) -> ObservationSchema:
+        if self.done:
+            return ObservationSchema(message="Episode is already done. Please reset.", data=self.current_state, reward=0.0, done=True)
+            
+        self.step_count += 1
+        reward = 0.0
+        message = ""
+        done = False
+        
+        # Action Logic
+        if action.action_type == "SearchPolicy":
+            if action.policy_id == self.task_data["policy_id"]:
+                self.current_state["policy_verified"] = True
+                message = f"Policy {action.policy_id} is {self.task_data['policy_status']} with coverage: {', '.join(self.task_data['policy_coverage'])}"
+                reward += 0.1 # Partial reward
+            else:
+                message = f"Policy {action.policy_id} not found."
+                reward -= 0.1
+                
+        elif action.action_type == "RequestDocument":
+            if action.document_type in self.task_data["required_documents"] and action.document_type not in self.current_state["documents_received"]:
+                self.current_state["missing_documents_requested"] = True
+                message = f"Document '{action.document_type}' requested successfully and has been uploaded to the claim."
+                self.current_state["documents_received"].append(action.document_type)
+                reward += 0.2 # Good partial reward
+            elif action.document_type in self.current_state["documents_received"]:
+                message = f"Document '{action.document_type}' is already on file."
+            else:
+                message = f"Document '{action.document_type}' is not a valid document or cannot be retrieved."
+                reward -= 0.05
+                
+        elif action.action_type == "AnalyzeFraud":
+            if action.claim_id == self.task_data["claim_id"]:
+                self.current_state["fraud_analyzed"] = True
+                message = self.task_data["fraud_analysis_result"]
+                reward += 0.1
+            else:
+                message = f"Claim {action.claim_id} not found."
+                
+        elif action.action_type == "ApproveClaim":
+            done = True
+            missing_docs = set(self.task_data["required_documents"]) - set(self.current_state["documents_received"])
+            
+            if not self.current_state["policy_verified"]:
+                message = "CRITICAL ERROR: Claim approved without verifying the policy. Claim processed incorrectly."
+                reward += 0.0
+            elif len(missing_docs) > 0:
+                message = f"CRITICAL ERROR: Claim approved while missing required documents: {missing_docs}. Claim processed incorrectly."
+                reward += 0.0
+            elif self.task_data["fraud_flags"]:
+                message = "CRITICAL ERROR: Fraudulent claim was approved. Major financial loss."
+                reward += 0.0
+            else:
+                message = "SUCCESS: Claim approved correctly. All checks passed."
+                reward += 1.0 # Max reward
+                
+        elif action.action_type == "RejectClaim":
+            done = True
+            if self.task_data["fraud_flags"]:
+                if self.current_state["fraud_analyzed"]:
+                    message = "SUCCESS: Fraudulent claim correctly identified and rejected."
+                    reward += 1.0
+                else:
+                    message = "LUCKY SUCCESS: Claim rejected correctly, but fraud analysis was never run. Bad practice."
+                    reward += 0.5
+            else:
+                # Rejecting a valid claim
+                message = "ERROR: Valid claim was rejected without cause."
+                reward += 0.0
+
+        if self.step_count >= self.max_steps and not done:
+            done = True
+            message = "Max steps reached without a final decision."
+
+        self.done = done
+        self.reward = max(0.0, min(1.0, reward)) # Clamp between 0 and 1 per step requirement (or accumulate, wait, OpenEnv rewards are usually partial but for final evaluation we want a final sum up to 1.0)
+        # To make it easier, let's just make the final reward the score. Current implementation gives 1.0 on success.
+        
+        return ObservationSchema(
+            message=message,
+            data=self.current_state,
+            reward=reward, # return the step reward
+            done=done
+        )
+
+    def state(self) -> ObservationSchema:
+        return ObservationSchema(
+            message="Current environment state",
+            data=self.current_state,
+            reward=self.reward,
+            done=self.done
+        )

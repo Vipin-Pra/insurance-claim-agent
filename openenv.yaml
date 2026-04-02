@@ -1,0 +1,35 @@
+name: "InsuranceClaimVerification"
+description: "Verify claims by checking policies, detecting fraud, and requesting missing documents."
+version: 1.0
+
+# Define tasks with their config
+tasks:
+  - id: "easy"
+    description: "Verify and approve a standard claim with all required documents."
+  - id: "medium"
+    description: "Request missing documents before making a decision."
+  - id: "hard"
+    description: "Analyze details and reject fraudulent claims."
+
+# Base configuration for building/running
+port: 7860
+entrypoint: "uvicorn main:app --host 0.0.0.0 --port 7860"
+
+# Observation space definition
+observation_space:
+  type: "Dict"
+  schema:
+    message: "str"
+    data: "Dict"
+    reward: "float"
+    done: "bool"
+
+# Action space definition
+action_space:
+  type: "Dict"
+  schema:
+    action_type: "str"
+    policy_id: "Optional[str]"
+    document_type: "Optional[str]"
+    claim_id: "Optional[str]"
+    reason: "Optional[str]"
