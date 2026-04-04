@@ -3,7 +3,6 @@ import os
 from statistics import mean
 
 from stable_baselines3 import PPO
-from app.models import ActionSchema
 from gym_wrapper import InsuranceGymWrapper
 
 
@@ -31,13 +30,15 @@ def main() -> None:
     parser.add_argument("--model-path", default="models/ppo_insurance", help="Path prefix used by stable-baselines3 save/load.")
     parser.add_argument("--episodes", type=int, default=30, help="Number of evaluation episodes.")
     parser.add_argument("--render", action="store_true", help="Render state transitions during evaluation.")
+    parser.add_argument("--use-real-data", action="store_true", help="Evaluate on dataset-backed real claim episodes.")
+    parser.add_argument("--data-path", default="data/sample_claims.jsonl", help="Path to JSONL real-claim dataset.")
     args = parser.parse_args()
 
     model_file = f"{args.model_path}.zip"
     if not os.path.exists(model_file):
         raise FileNotFoundError(f"Model file not found: {model_file}. Run train_rl.py first.")
 
-    env = InsuranceGymWrapper()
+    env = InsuranceGymWrapper(use_real_data=args.use_real_data, data_path=args.data_path if args.use_real_data else None)
     model = PPO.load(args.model_path)
 
     tasks = ["easy", "medium", "hard"]

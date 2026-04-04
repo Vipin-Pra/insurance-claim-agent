@@ -1,17 +1,40 @@
-from typing import Dict, Any
+import random
+from typing import Dict, Any, Optional
 from .models import ActionSchema, ObservationSchema
 from .tasks import TASKS, grade_task
+from .data_loader import load_claims_dataset
 
 class InsuranceEnvironment:
-    def __init__(self):
+    def __init__(self, use_real_data: bool = False, data_path: Optional[str] = None):
+        self.use_real_data = use_real_data
+        self.real_claims = []
+        if self.use_real_data:
+            if not data_path:
+                raise ValueError("data_path is required when use_real_data=True")
+            self.real_claims = load_claims_dataset(data_path)
         self.reset("easy")
 
+    def _select_real_claim(self, task_name: str) -> Dict[str, Any]:
+        if not self.real_claims:
+            raise ValueError("No real claim records loaded.")
+
+        if task_name in {"easy", "medium", "hard"}:
+            matching = [record for record in self.real_claims if record.get("difficulty") == task_name]
+            if matching:
+                return random.choice(matching).copy()
+
+        return random.choice(self.real_claims).copy()
+
     def reset(self, task_name: str = "easy") -> ObservationSchema:
-        if task_name not in TASKS:
-            raise ValueError(f"Task {task_name} not found.")
-            
-        self.task_name = task_name
-        self.task_data = TASKS[task_name].copy()
+        if self.use_real_data:
+            self.task_data = self._select_real_claim(task_name)
+            self.task_name = self.task_data.get("difficulty", "real")
+        else:
+            if task_name not in TASKS:
+                raise ValueError(f"Task {task_name} not found.")
+
+            self.task_name = task_name
+            self.task_data = TASKS[task_name].copy()
         
         self.current_state = {
             "claim_id": self.task_data["claim_id"],
@@ -31,11 +54,11 @@ class InsuranceEnvironment:
         self.reward = 0.0
 
         return ObservationSchema(
-            message=f"Environment reset to task '{task_name}'. You have a new claim to process. Claim ID: {self.current_state['claim_id']}. Description: {self.current_state['description']}",
+            message=f"Environment reset to task '{self.task_name}'. You have a new claim to process. Claim ID: {self.current_state['claim_id']}. Description: {self.current_state['description']}",
             data={"claim_id": self.current_state["claim_id"], "documents_received": self.current_state["documents_received"]},
             reward=0.0,
             done=False,
-            info={"task": task_name, "grader_score": 0.0},
+            info={"task": self.task_name, "grader_score": 0.0, "mode": "real" if self.use_real_data else "synthetic"},
         )
 
     def step(self, action: ActionSchema) -> ObservationSchema:

@@ -2,6 +2,7 @@ import os
 import json
 import time
 import uuid
+import importlib
 from threading import Lock
 from typing import Dict, Optional, Tuple
 
@@ -57,14 +58,14 @@ def _get_redis_client():
         return _REDIS_CLIENT
 
     try:
-        import redis
+        redis_module = importlib.import_module("redis")
     except ImportError as exc:
         raise HTTPException(
             status_code=500,
             detail="Redis backend selected but 'redis' package is not installed.",
         ) from exc
 
-    _REDIS_CLIENT = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+    _REDIS_CLIENT = redis_module.Redis.from_url(REDIS_URL, decode_responses=True)
     return _REDIS_CLIENT
 
 

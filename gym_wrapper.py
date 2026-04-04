@@ -2,6 +2,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import random
+from typing import Optional
 from app.environment import InsuranceEnvironment
 from app.models import ActionSchema
 
@@ -12,9 +13,10 @@ class InsuranceGymWrapper(gym.Env):
     """
     metadata = {"render_modes": ["console"]}
 
-    def __init__(self):
+    def __init__(self, use_real_data: bool = False, data_path: Optional[str] = None):
         super(InsuranceGymWrapper, self).__init__()
-        self.env = InsuranceEnvironment()
+        self.use_real_data = use_real_data
+        self.env = InsuranceEnvironment(use_real_data=use_real_data, data_path=data_path)
         
         # Simplified Action Space
         # 0: SearchPolicy

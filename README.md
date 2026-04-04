@@ -160,6 +160,38 @@ python evaluate_rl.py --model-path models/ppo_insurance
 python evaluate_rl.py --render
 ```
 
+## Real Data RL Training
+
+The environment can train from dataset-backed claim episodes using JSONL input.
+
+If your historical data is in CSV, convert it first:
+```bash
+python prepare_real_claims.py --input-csv data/raw_claims.csv --output-jsonl data/real_claims.jsonl
+```
+
+Expected CSV columns:
+- `claim_id`, `policy_id`, `description`, `policy_coverage`
+- `required_documents`, `documents_provided`, `fraud_flags`
+- optional: `policy_status`, `fraud_analysis_result`, `difficulty`
+
+List-like columns should use `;` separator by default. You can override with `--list-separator`.
+
+Dataset format (`data/sample_claims.jsonl`): one JSON object per line with fields:
+- `claim_id`, `policy_id`, `description`, `policy_status`, `policy_coverage`
+- `required_documents`, `documents_provided`
+- `fraud_flags`, `fraud_analysis_result`
+- optional `difficulty` (`easy`, `medium`, `hard`)
+
+Train on real-data episodes:
+```bash
+python train_rl.py --use-real-data --data-path data/sample_claims.jsonl --timesteps 50000 --model-name ppo_insurance_real
+```
+
+Evaluate on real-data episodes:
+```bash
+python evaluate_rl.py --model-path models/ppo_insurance_real --use-real-data --data-path data/sample_claims.jsonl --episodes 90
+```
+
 ## Google Colab (Train + Evaluate)
 
 Run this in a single Colab cell:
