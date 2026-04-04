@@ -7,6 +7,37 @@ from main import app
 from app.tasks import TASKS, grade_task
 
 
+def _read_dotenv_value(key: str) -> str:
+    if not os.path.exists('.env'):
+        return ""
+
+    try:
+        with open('.env', 'r', encoding='utf-8') as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                k, v = line.split('=', 1)
+                if k.strip() == key:
+                    return v.strip().strip('"').strip("'")
+    except OSError:
+        return ""
+
+    return ""
+
+
+def _get_config_value(key: str, default: str = "") -> str:
+    env_value = os.getenv(key)
+    if env_value is not None and env_value != "":
+        return env_value
+    dotenv_value = _read_dotenv_value(key)
+    return dotenv_value if dotenv_value != "" else default
+
+
+def _is_true(value: str) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def validate_openenv_yaml() -> None:
     with open('openenv.yaml', 'r') as f:
         content = f.read()
@@ -38,15 +69,26 @@ def validate_tasks_and_graders() -> None:
 
 def validate_api_contract() -> None:
     client = TestClient(app)
+    require_api_key = _is_true(_get_config_value("REQUIRE_API_KEY", "false"))
+    api_key = _get_config_value("API_KEY", "")
+    auth_headers = {}
+
+    if require_api_key:
+        if not api_key:
+            print("[ERROR] REQUIRE_API_KEY=true but API_KEY is missing in env/.env")
+            sys.exit(1)
+        auth_headers = {"X-API-Key": api_key}
 
     for task_name in ["easy", "medium", "hard"]:
-        reset_resp = client.post("/reset", json={"task": task_name})
+        reset_resp = client.post("/reset", json={"task": task_name}, headers=auth_headers)
         if reset_resp.status_code != 200:
             print(f"[ERROR] /reset failed for task '{task_name}' with status {reset_resp.status_code}")
             sys.exit(1)
 
         session_id = reset_resp.headers.get("X-Session-ID")
-        headers = {"X-Session-ID": session_id} if session_id else {}
+        headers = dict(auth_headers)
+        if session_id:
+            headers["X-Session-ID"] = session_id
         payload = reset_resp.json()
 
         for key in ["message", "data", "reward", "done", "info"]:
