@@ -6,7 +6,7 @@ colorTo: green
 sdk: docker
 app_port: 7860
 tags:
-	- openenv
+  - openenv
 ---
 
 # Insurance Claim Verification OpenEnv Environment
