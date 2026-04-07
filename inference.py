@@ -36,7 +36,7 @@ Rules:
 """
 
 def solve_task(task_name):
-    print(f"\n--- Starting Task: {task_name} ---")
+    print(f"[START] {task_name}")
     headers = {}
     if ENV_API_KEY:
         headers["X-API-Key"] = ENV_API_KEY
@@ -50,6 +50,7 @@ def solve_task(task_name):
             headers["X-Session-ID"] = session_id
     except Exception as e:
         print(f"Failed to reset environment: {e}")
+        print(f"[END] {task_name}")
         return 0.0
 
     messages = [
@@ -59,7 +60,7 @@ def solve_task(task_name):
     
     score = 0.0
     for step in range(10):
-        print(f"\nStep {step+1}: Agent thinking...")
+        print(f"[STEP] {step}")
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME,
@@ -70,7 +71,7 @@ def solve_task(task_name):
             )
             action_text = response.choices[0].message.content
             action = json.loads(action_text)
-            print(f"Agent Action: {json.dumps(action)}")
+            print(f"Action: {json.dumps(action)}")
             
             messages.append({"role": "assistant", "content": action_text})
             
@@ -87,11 +88,12 @@ def solve_task(task_name):
             
             score = obs.get("reward", score)
             if obs.get("done", False):
-                print(f"Task finished! Final Score: {score}")
+                print(f"[END] {task_name} | Score: {score}")
                 break
                 
         except Exception as e:
             print(f"Error during agent loop: {e}")
+            print(f"[END] {task_name} | Score: {score}")
             break
             
         time.sleep(0.2)
