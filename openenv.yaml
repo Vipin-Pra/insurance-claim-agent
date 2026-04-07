@@ -13,7 +13,7 @@ tasks:
 
 # Base configuration for building/running
 port: 7860
-entrypoint: "uvicorn main:app --host 0.0.0.0 --port 7860"
+entrypoint: "uv run server"
 
 # Observation space definition
 observation_space:

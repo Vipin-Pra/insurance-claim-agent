@@ -326,8 +326,11 @@ def get_state(
     return env.state()
 
 
-if __name__ == "__main__":
+def main():
     import uvicorn
     # Typically environments run on port 7860 for HuggingFace Spaces
     port = int(os.environ.get("PORT", 7860))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
+    uvicorn.run("server.app:app", host="0.0.0.0", port=port, reload=False)
+
+if __name__ == "__main__":
+    main()
