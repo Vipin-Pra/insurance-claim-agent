@@ -32,7 +32,7 @@ def _env_bool(name: str, default: str = "false") -> bool:
     return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
-REQUIRE_API_KEY = _env_bool("REQUIRE_API_KEY", "false")
+REQUIRE_API_KEY = False
 API_KEY = os.environ.get("API_KEY", "")
 SESSION_BACKEND = os.environ.get("SESSION_BACKEND", "memory").strip().lower()
 SESSION_TTL_SECONDS = _env_int("SESSION_TTL_SECONDS", 3600)
