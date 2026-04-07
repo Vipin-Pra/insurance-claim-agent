@@ -15,6 +15,9 @@ tasks:
 port: 7860
 entrypoint: "uv run server"
 
+dependencies:
+  - "openenv-core>=0.2.0"
+
 # Observation space definition
 observation_space:
   type: "Dict"
