@@ -103,4 +103,5 @@ TASK_GRADERS = {
 
 
 def grade_task(task_name: str, task_data, state, action_history, done: bool) -> float:
-    return TASK_GRADERS[task_name](task_data, state, action_history, done)
+    score = TASK_GRADERS[task_name](task_data, state, action_history, done)
+    return max(0.01, min(0.99, score))

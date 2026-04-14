@@ -62,7 +62,7 @@ def validate_tasks_and_graders() -> None:
             "last_action_type": None,
         }
         score = grade_task(task_name, task_data, state, [], done=False)
-        if not (0.0 <= score <= 1.0):
+        if not (0.0 < score < 1.0):
             print(f"[ERROR] Grader score out of range for task '{task_name}': {score}")
             sys.exit(1)
 
